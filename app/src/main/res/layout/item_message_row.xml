@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="72dp"
+    android:orientation="horizontal"
+    android:padding="10dp"
+    android:gravity="center_vertical"
+    android:background="@drawable/row_border"
+    android:layout_marginBottom="10dp"
+    android:descendantFocusability="blocksDescendants">
+
+    <ImageButton
+        android:id="@+id/btnDetails"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@android:drawable/ic_menu_search"
+        android:background="@drawable/bg_cyber_icon_button"
+        android:contentDescription="Details"
+        android:scaleType="centerInside"
+        android:clickable="true"
+        android:focusable="false"
+        android:padding="10dp"/>
+
+    <TextView
+        android:id="@+id/tvTime"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="0.16"
+        android:gravity="center"
+        android:text="00:00"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="@color/text_secondary"/>
+
+    <TextView
+        android:id="@+id/tvMediaType"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.12"
+        android:gravity="center"
+        android:text="TXT"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="@color/text_secondary"/>
+
+    <TextView
+        android:id="@+id/tvMsgId"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.20"
+        android:gravity="center"
+        android:text="ID"
+        android:textSize="13sp"
+        android:textColor="@color/text_secondary"/>
+
+    <TextView
+        android:id="@+id/tvSize"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.16"
+        android:gravity="center"
+        android:text="-"
+        android:textSize="13sp"
+        android:textColor="@color/text_secondary"/>
+
+    <TextView
+        android:id="@+id/tvMsgText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="0.36"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:gravity="right"
+        android:text="Loading..."
+        android:textSize="14sp"
+        android:textColor="@color/text_primary"/>
+</LinearLayout>

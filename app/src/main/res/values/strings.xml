@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Pasiflonet Mobile</string>
+    <string name="settings_title">Settings</string>
+    <string name="target_channel_label">Target Channel (Username)</string>
+    <string name="channel_hint">e.g. @MyChannel</string>
+    <string name="logo_label">Channel Logo</string>
+    <string name="select_logo">Select Logo</string>
+    <string name="clear_cache">🗑️ Clear Cache</string>
+    <string name="save_settings">SAVE SETTINGS</string>
+</resources>

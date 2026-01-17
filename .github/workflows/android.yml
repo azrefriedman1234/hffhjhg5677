@@ -1,0 +1,39 @@
+name: Android Build CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    # תיקון הרשאות לקובץ ה-gradlew (אם קיים, אם לא נשתמש ב-gradle מערכת)
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      with:
+        gradle-version: '8.2'
+    
+    # בדיקת תקינות קבצים (לוודא שלא ירד HTML בטעות)
+    - name: Check Libs Size
+      run: ls -lh app/libs/
+
+    - name: Build with Gradle
+      # שימוש במערכת של Gradle Action אבל עם הפקודות הנכונות
+      run: gradle assembleDebug --stacktrace --no-daemon --refresh-dependencies
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Pasiflonet-Debug-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
