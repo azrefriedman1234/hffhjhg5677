@@ -8,6 +8,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.*
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -46,7 +47,6 @@ class YoutubeCaptionsEngine(
 
         job = scope.launch {
             onStatus("טוען כתוביות מיוטיוב (ערבית)...")
-
             ensureTranslator()
 
             val baseUrl = withContext(Dispatchers.IO) {
@@ -60,7 +60,6 @@ class YoutubeCaptionsEngine(
 
             onStatus("כתוביות פעילות ✅")
 
-            // Poll loop (works for VOD and many LIVE streams that expose captions)
             while (isActive) {
                 try {
                     val json = withContext(Dispatchers.IO) { fetchJson3(baseUrl) }
@@ -68,11 +67,11 @@ class YoutubeCaptionsEngine(
                         val newLines = extractNewCaptionLines(json)
                         for (ar in newLines) {
                             val he = translate(ar)
-                            onLine(ar, he)
+                            if (ar.isNotBlank() && he.isNotBlank()) onLine(ar, he)
                         }
                     }
                 } catch (_: Exception) {
-                    // keep running
+                    // keep polling
                 }
                 delay(1500)
             }
@@ -144,8 +143,6 @@ class YoutubeCaptionsEngine(
 
             val text = sb.toString().replace("\n", " ").trim()
             if (text.isBlank()) continue
-
-            // skip duplicates
             if (text == lastArabic) continue
 
             lastArabic = text
@@ -169,7 +166,6 @@ class YoutubeCaptionsEngine(
         val playerJson = extractInitialPlayerResponseJson(html) ?: return null
 
         val root = try { JSONObject(playerJson) } catch (_: Exception) { return null }
-
         val captions = root.optJSONObject("captions") ?: return null
         val renderer = captions.optJSONObject("playerCaptionsTracklistRenderer") ?: return null
         val tracks = renderer.optJSONArray("captionTracks") ?: return null
@@ -182,7 +178,7 @@ class YoutubeCaptionsEngine(
             val code = t.optString("languageCode", "")
             if (code != lang) continue
 
-            // prefer asr (auto captions) if available for live
+            // prefer auto captions if available
             val kind = t.optString("kind", "")
             val score = if (kind == "asr") 2 else 1
             if (score > bestScore) {
@@ -191,7 +187,6 @@ class YoutubeCaptionsEngine(
             }
         }
 
-        // if no ar track, maybe there is a "ar" auto track under different code? (rare)
         val chosen = best ?: return null
         return chosen.optString("baseUrl", "").takeIf { it.isNotBlank() }
     }
@@ -204,7 +199,6 @@ class YoutubeCaptionsEngine(
         conn.readTimeout = 10000
         conn.instanceFollowRedirects = true
 
-        // Important: YouTube blocks "empty" UA sometimes
         conn.setRequestProperty(
             "User-Agent",
             "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -216,9 +210,8 @@ class YoutubeCaptionsEngine(
 
         val br = BufferedReader(InputStreamReader(conn.inputStream))
         val sb = StringBuilder()
-        var line: String?
         while (true) {
-            line = br.readLine() ?: break
+            val line = br.readLine() ?: break
             sb.append(line).append('\n')
         }
         br.close()
@@ -227,14 +220,9 @@ class YoutubeCaptionsEngine(
 
     private fun appendParam(url: String, k: String, v: String): String {
         val sep = if (url.contains("?")) "&" else "?"
-        // don't duplicate fmt
         return if (url.contains("$k=")) url else "$url$sep$k=$v"
     }
 
-    /**
-     * Extracts the JSON object assigned to ytInitialPlayerResponse from watch HTML.
-     * Uses brace counting to avoid regex issues.
-     */
     private fun extractInitialPlayerResponseJson(html: String): String? {
         val marker = "ytInitialPlayerResponse"
         val idx = html.indexOf(marker)
@@ -251,9 +239,8 @@ class YoutubeCaptionsEngine(
         while (i < html.length) {
             val ch = html[i]
             if (inStr) {
-                if (esc) {
-                    esc = false
-                } else {
+                if (esc) esc = false
+                else {
                     if (ch == '\\') esc = true
                     else if (ch == '"') inStr = false
                 }
@@ -263,9 +250,7 @@ class YoutubeCaptionsEngine(
                     '{' -> depth++
                     '}' -> {
                         depth--
-                        if (depth == 0) {
-                            return html.substring(start, i + 1)
-                        }
+                        if (depth == 0) return html.substring(start, i + 1)
                     }
                 }
             }
@@ -279,5 +264,4 @@ private suspend fun <T> Task<T>.await(): T =
     suspendCancellableCoroutine { cont ->
         addOnSuccessListener { cont.resume(it) }
         addOnFailureListener { cont.resumeWithException(it) }
-catch (_: Exception) {} }
     }
