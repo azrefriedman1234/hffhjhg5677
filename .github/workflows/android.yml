@@ -37,3 +37,9 @@ jobs:
       with:
         name: Pasiflonet-Debug-APK
         path: app/build/outputs/apk/debug/app-debug.apk
+
+
+      - name: Install Android 34 SDK
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
