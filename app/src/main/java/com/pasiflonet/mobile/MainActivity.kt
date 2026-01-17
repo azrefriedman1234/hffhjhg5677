@@ -28,6 +28,7 @@ import org.drinkless.tdlib.TdApi
 import java.io.File
 import android.util.Log
 import android.graphics.Color
+import android.net.Uri
 
 class MainActivity : BaseActivity() {
     private lateinit var b: ActivityMainBinding
@@ -286,8 +287,10 @@ class MainActivity : BaseActivity() {
             s.loadsImagesAutomatically = true
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
+            s.javaScriptCanOpenWindowsAutomatically = true
+            s.setSupportMultipleWindows(true)
 
-            // Better compatibility (avoid blank player)
+            // Better compatibility (avoid blank / errors)
             s.userAgentString =
                 "Mozilla/5.0 (Linux; Android ${Build.VERSION.RELEASE}; ${Build.MODEL}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
@@ -308,12 +311,17 @@ class MainActivity : BaseActivity() {
         val url = prefs.getString("youtube_url", "")?.trim().orEmpty()
         b.tvYoutubeUrl.text = if (url.isNotEmpty()) url else "הכנס קישור ביוטיוב בהגדרות"
 
+        // Fallback: tap the URL text to open in YouTube app/browser (if WebView player fails with 153)
+        b.tvYoutubeUrl.setOnClickListener {
+            if (url.isNotEmpty()) {
+                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: Exception) {}
+            }
+        }
+
         val id = YoutubeUtil.extractVideoId(url)
         if (id != null) {
-            val embedUrl = YoutubeUtil.buildEmbedUrl(id)
-            try { b.webYoutube.loadUrl(embedUrl) } catch (_: Exception) {}
+            loadYoutubePlayerHtml(id)
         } else {
-            // fallback: try opening the URL directly instead of blank
             if (url.isNotEmpty()) {
                 try { b.webYoutube.loadUrl(url) } catch (_: Exception) {}
             } else {
