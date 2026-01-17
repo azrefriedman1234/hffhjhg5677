@@ -306,6 +306,19 @@ class MainActivity : BaseActivity() {
         }
     }
 
+
+    private fun loadYoutubePlayerHtml(videoId: String) {
+        try {
+            val html = assets.open("yt_player.html").bufferedReader().use { it.readText() }
+                .replace("__VIDEO_ID__", videoId)
+            b.webYoutube.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "utf-8", null)
+        } catch (e: Exception) {
+            // fallback: normal embed
+            val embedUrl = com.pasiflonet.mobile.utils.YoutubeUtil.buildEmbedUrl(videoId)
+            try { b.webYoutube.loadUrl(embedUrl) } catch (_: Exception) {}
+        }
+    }
+
     private fun reloadYoutubeFromPrefs() {
         val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
         val url = prefs.getString("youtube_url", "")?.trim().orEmpty()
