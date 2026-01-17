@@ -29,7 +29,10 @@ class LiveArabicCaptioner(
     private var recognizer: SpeechRecognizer? = null
     private var translator: Translator? = null
     private var isRunning = false
+    private var isListening = false
     private var isTranslatorReady = false
+
+    private var restartRunnable: Runnable? = null
 
     private val listenIntent: Intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -38,6 +41,10 @@ class LiveArabicCaptioner(
         putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, true)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        // Try to keep sessions longer; we still restart on end/errors to simulate continuous captions.
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500)
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
     }
 
@@ -50,15 +57,18 @@ class LiveArabicCaptioner(
 
         isRunning = true
         onStatus("Preparing translator...")
-        ensureTranslator { 
+        ensureTranslator {
             onStatus("Listening (Arabic)...")
             ensureRecognizer()
-            restartListening(delayMs = 100)
+            // Kick off the first listening session.
+            scheduleRestart(delayMs = 100)
         }
     }
 
     fun stop() {
         isRunning = false
+        isListening = false
+        restartRunnable?.let { mainHandler.removeCallbacks(it) }
         try { recognizer?.stopListening() } catch (_: Exception) {}
         try { recognizer?.cancel() } catch (_: Exception) {}
         onStatus("Stopped")
@@ -82,13 +92,21 @@ class LiveArabicCaptioner(
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {
-                    if (isRunning) restartListening(delayMs = 200)
+                    isListening = false
+                    if (isRunning) scheduleRestart(delayMs = 250)
                 }
 
                 override fun onError(error: Int) {
-                    // Common errors: ERROR_NO_MATCH, ERROR_SPEECH_TIMEOUT.
                     if (!isRunning) return
-                    restartListening(delayMs = 400)
+                    isListening = false
+
+                    val delay = when (error) {
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 900L
+                        SpeechRecognizer.ERROR_NO_MATCH -> 450L
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> 450L
+                        else -> 650L
+                    }
+                    scheduleRestart(delayMs = delay)
                 }
 
                 override fun onResults(results: android.os.Bundle?) {
@@ -98,34 +116,39 @@ class LiveArabicCaptioner(
                         ?.trim()
                         .orEmpty()
 
-                    if (text.isNotEmpty()) {
-                        translateAndEmit(text)
-                    }
-                    if (isRunning) restartListening(delayMs = 200)
+                    if (text.isNotEmpty()) translateAndEmit(text)
+
+                    isListening = false
+                    if (isRunning) scheduleRestart(delayMs = 300)
                 }
 
-                override fun onPartialResults(partialResults: android.os.Bundle?) {
-                    // Optional: could show live partial text.
-                }
-
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
                 override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
             })
         }
     }
 
-    private fun restartListening(delayMs: Long) {
-        mainHandler.removeCallbacksAndMessages(null)
-        mainHandler.postDelayed({
-            if (!isRunning) return@postDelayed
-            try {
-                recognizer?.cancel()
-            } catch (_: Exception) {}
-            try {
-                recognizer?.startListening(listenIntent)
-            } catch (e: Exception) {
-                onStatus("Recognizer error: ${e.message}")
-            }
-        }, delayMs)
+    private fun scheduleRestart(delayMs: Long) {
+        restartRunnable?.let { mainHandler.removeCallbacks(it) }
+        val r = Runnable {
+            if (!isRunning) return@Runnable
+            startListeningSafely()
+        }
+        restartRunnable = r
+        mainHandler.postDelayed(r, delayMs)
+    }
+
+    private fun startListeningSafely() {
+        if (!isRunning) return
+        if (isListening) return
+        isListening = true
+        try {
+            recognizer?.startListening(listenIntent)
+        } catch (e: Exception) {
+            isListening = false
+            onStatus("Recognizer error: ${e.message}")
+            scheduleRestart(delayMs = 900)
+        }
     }
 
     private fun ensureTranslator(onReady: () -> Unit) {
@@ -147,14 +170,12 @@ class LiveArabicCaptioner(
             return
         }
 
-        // Download model if needed (no API key). Once downloaded, works offline.
         t.downloadModelIfNeeded()
             .addOnSuccessListener {
                 isTranslatorReady = true
                 onReady()
             }
             .addOnFailureListener { e ->
-                // Still allow start; we'll fallback to TranslationManager.
                 onStatus("Translator download failed; fallback mode (${e.message})")
                 isTranslatorReady = false
                 onReady()
@@ -166,22 +187,16 @@ class LiveArabicCaptioner(
         if (t != null && isTranslatorReady) {
             t.translate(arabicText)
                 .addOnSuccessListener { hebrew -> onLine(arabicText, hebrew) }
-                .addOnFailureListener {
-                    // Fallback to keyless network translation
-                    fallbackTranslate(arabicText)
-                }
+                .addOnFailureListener { fallbackTranslate(arabicText) }
             return
         }
-
         fallbackTranslate(arabicText)
     }
 
     private fun fallbackTranslate(arabicText: String) {
         onStatus("Translating...")
-        // TranslationManager is suspend; run it on background thread
         Thread {
             val heb = try {
-                // blocky but safe & simple here
                 kotlinx.coroutines.runBlocking {
                     TranslationManager.translateToHebrew(arabicText)
                 }

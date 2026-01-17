@@ -10,6 +10,7 @@ object YoutubeUtil {
      * - https://youtu.be/VIDEO_ID
      * - https://www.youtube.com/shorts/VIDEO_ID
      * - https://www.youtube.com/embed/VIDEO_ID
+     * - https://www.youtube.com/live/VIDEO_ID
      */
     fun extractVideoId(rawUrl: String): String? {
         val url = rawUrl.trim()
@@ -29,12 +30,21 @@ object YoutubeUtil {
             val v = u.getQueryParameter("v")
             if (!v.isNullOrBlank()) return v
 
-            // youtube.com/shorts/<id> or /embed/<id>
+            // youtube.com/shorts/<id>, /embed/<id>, /live/<id>, /v/<id>
             val seg = u.pathSegments
-            val idxShorts = seg.indexOf("shorts")
-            if (idxShorts >= 0 && seg.size > idxShorts + 1) return seg[idxShorts + 1]
-            val idxEmbed = seg.indexOf("embed")
-            if (idxEmbed >= 0 && seg.size > idxEmbed + 1) return seg[idxEmbed + 1]
+            fun idAfter(marker: String): String? {
+                val idx = seg.indexOf(marker)
+                return if (idx >= 0 && seg.size > idx + 1) seg[idx + 1] else null
+            }
+
+            idAfter("live")?.let { return it }
+            idAfter("shorts")?.let { return it }
+            idAfter("embed")?.let { return it }
+            idAfter("v")?.let { return it }
+
+            // last resort: if URL is like youtube.com/<id>
+            val last = seg.lastOrNull()
+            if (!last.isNullOrBlank() && last.length >= 11 && last != "watch") return last
 
             null
         } catch (_: Exception) {
@@ -44,7 +54,7 @@ object YoutubeUtil {
 
     fun buildEmbedUrl(videoId: String): String {
         // autoplay usually requires mute in many WebView policies
-        // loop requires playlist=<id>
-        return "https://www.youtube.com/embed/$videoId?autoplay=1&mute=1&playsinline=1&loop=1&playlist=$videoId"
+        // NOTE: don't force loop/playlist here (can break some live streams).
+        return "https://www.youtube.com/embed/$videoId?autoplay=1&mute=1&playsinline=1&controls=1&fs=1&rel=0&modestbranding=1"
     }
 }
