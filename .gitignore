@@ -5,3 +5,6 @@
 /build
 /app/build
 .DS_Store
+
+# Large speech models - do not commit
+**/vosk**/

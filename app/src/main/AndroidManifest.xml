@@ -47,5 +47,7 @@
             android:exported="false"
             android:process=":ffmpeg" />
 
+    
+        <activity android:name="com.pasiflonet.mobile.stream.StreamActivity" android:exported="false" />
     </application>
 </manifest>
